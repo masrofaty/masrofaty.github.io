@@ -297,8 +297,8 @@ async function flush(){
   if(!ref||writing||!dirty)return;
   writing=true;dirty=false;
   const body=JSON.parse(JSON.stringify(S));
-  try{await ref.set(body);retries=0;if(!dirty)setSync('ok')}
-  catch(e){
+  try{await ref.set(body);console.info('[sync] saved');retries=0;if(!dirty)setSync('ok')}
+  catch(e){console.error('[sync] save failed',e&&e.code,e&&e.message);
     if(e&&(e.code==='unavailable')&&retries<4){retries++;dirty=true;await new Promise(r=>setTimeout(r,1200+Math.random()*1500))}
     else if(e&&e.code==='quota_exceeded'){setSync('err');toast('مساحة الحفظ خلصت')}
     else setSync('err');
@@ -312,7 +312,9 @@ function attachRemote(r){
   let served=false;
   const to=setTimeout(()=>{if(!served){setSync('slow');try{if(localStorage.getItem('masrofati_lp')!=='1'){localStorage.setItem('masrofati_lp','1');toast('بجرّب طريقة اتصال تانية…');setTimeout(()=>location.reload(),1500)}}catch(e){}}},12000);
   unsubRemote=r.onSnapshot(snap=>{
-    if(snap.metadata.hasPendingWrites)return;
+    console.info('[sync] snapshot',{exists:snap.exists,fromCache:snap.metadata.fromCache,pending:snap.metadata.hasPendingWrites});
+    if(!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites){served=true;clearTimeout(to)}
+    if(snap.metadata.hasPendingWrites){if(!snap.metadata.fromCache)setSync('saving');return}
     const remote=snap.exists?norm(snap.data()):null;
     if(remote&&remote.updatedAt>S.updatedAt){S=remote;persistLocal();if(ref&&!snap.metadata.fromCache&&repairExtras())save();else render()}
     if(!ref){ref=r;if(repairExtras()){save();return}
@@ -1343,7 +1345,7 @@ initSync();
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,setDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,setDoc,onSnapshot,getDocFromServer} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const app=initializeApp({
   apiKey:"AIzaSyAiM2pCxSvcsnVLaYnkM1LozlLl37JZjTY",
   authDomain:"masrofaty-d2f3a.firebaseapp.com",
@@ -1373,6 +1375,9 @@ onAuthStateChanged(auth,u=>{
       cb({exists:!!data,data:()=>data,metadata:s.metadata})},eb);return unsub}
   };
   window.attachRemote(r);
+  console.info('[sync] user',u.uid,'project',app.options.projectId,'longPolling',LP);
+  Promise.race([getDocFromServer(d).then(x=>'OK exists='+x.exists()),new Promise(res=>setTimeout(()=>res('TIMEOUT 15s'),15000))])
+    .then(m=>console.info('[sync] server test:',m)).catch(e=>console.error('[sync] server test failed:',e.code,e.message));
 });
 </script>
 </body>
