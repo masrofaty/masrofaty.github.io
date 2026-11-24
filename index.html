@@ -1369,15 +1369,18 @@ onAuthStateChanged(auth,u=>{
   window.onUser(u?{uid:u.uid,email:u.email,name:u.displayName}:null);
   if(!u)return;
   const d=doc(db,'users',u.uid);
+  const wrap=(s,meta)=>{let data=null;if(s.exists()){try{data=JSON.parse(s.data().json)}catch(e){}}return{exists:!!data,data:()=>data,metadata:meta||s.metadata}};
+  let CB=null;
+  const pull=()=>getDocFromServer(d).then(s=>{if(CB)CB(wrap(s,{fromCache:false,hasPendingWrites:false}))}).catch(e=>console.warn('[sync] pull failed',e.code));
   const r={
     set:b=>setDoc(d,{json:JSON.stringify(b),updatedAt:b.updatedAt||0}),
-    onSnapshot:(cb,eb)=>{unsub=onSnapshot(d,s=>{let data=null;if(s.exists()){try{data=JSON.parse(s.data().json)}catch(e){}}
-      cb({exists:!!data,data:()=>data,metadata:s.metadata})},eb);return unsub}
+    onSnapshot:(cb,eb)=>{CB=cb;const u1=onSnapshot(d,s=>cb(wrap(s)),eb);
+      pull();const iv=setInterval(pull,60000);
+      const vis=()=>{if(document.visibilityState==='visible')pull()};document.addEventListener('visibilitychange',vis);
+      unsub=()=>{u1();clearInterval(iv);document.removeEventListener('visibilitychange',vis);CB=null};return unsub}
   };
   window.attachRemote(r);
   console.info('[sync] user',u.uid,'project',app.options.projectId,'longPolling',LP);
-  Promise.race([getDocFromServer(d).then(x=>'OK exists='+x.exists()),new Promise(res=>setTimeout(()=>res('TIMEOUT 15s'),15000))])
-    .then(m=>console.info('[sync] server test:',m)).catch(e=>console.error('[sync] server test failed:',e.code,e.message));
 });
 </script>
 </body>
