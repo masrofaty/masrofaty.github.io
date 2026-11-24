@@ -290,7 +290,7 @@ let S=loadLocal();
 const UI={tab:'home',ym:curYM(),txFilter:'all'};
 
 let ref=null,writing=false,dirty=false,wTimer=null,retries=0;
-const SYNC={ok:'✓ محفوظ',saving:'جارِ الحفظ…',loading:'جارِ التحميل…',slow:'الحفظ مش متاح دلوقتي',local:'محفوظ على الجهاز بس',offline:'من غير نت · هيتحفظ لما يرجع',err:'مشكلة في الحفظ'};
+const SYNC={ok:'✓ محفوظ',saving:'جارِ الحفظ…',loading:'جارِ التحميل…',slow:'مش قادر أوصل للسيرفر',local:'محفوظ على الجهاز بس',offline:'من غير نت · هيتحفظ لما يرجع',err:'مشكلة في الحفظ'};
 function setSync(k){if(k==='saving'&&!navigator.onLine)k='offline';document.getElementById('sync').textContent=SYNC[k]||''}
 function save(){S.updatedAt=Date.now();persistLocal();render();if(ref){dirty=true;setSync('saving');clearTimeout(wTimer);wTimer=setTimeout(flush,500)}}
 async function flush(){
@@ -309,7 +309,8 @@ async function initSync(){setSync('local')}
 let unsubRemote=null;
 function attachRemote(r){
   ref=null;setSync('loading');
-  const to=setTimeout(()=>{if(!ref)setSync('slow')},10000);
+  let served=false;
+  const to=setTimeout(()=>{if(!served){setSync('slow');try{if(localStorage.getItem('masrofati_lp')!=='1'){localStorage.setItem('masrofati_lp','1');toast('بجرّب طريقة اتصال تانية…');setTimeout(()=>location.reload(),1500)}}catch(e){}}},12000);
   unsubRemote=r.onSnapshot(snap=>{
     if(snap.metadata.hasPendingWrites)return;
     const remote=snap.exists?norm(snap.data()):null;
@@ -317,9 +318,9 @@ function attachRemote(r){
     if(!ref){ref=r;if(repairExtras()){save();return}
       if((!remote||S.updatedAt>remote.updatedAt)&&S.updatedAt>0){dirty=true;setSync('saving');flush();return}
     }
-    if(!snap.metadata.fromCache){clearTimeout(to);if(!dirty&&!writing)setSync('ok')}
+    if(!snap.metadata.fromCache){served=true;clearTimeout(to);if(!dirty&&!writing)setSync('ok')}
     else if(!navigator.onLine)setSync('offline');
-  },err=>{clearTimeout(to);setSync('err')});
+  },err=>{clearTimeout(to);setSync('err');console.error('Firestore',err);toast('مشكلة في الاتصال: '+(err&&err.code||''))});
 }
 window.attachRemote=attachRemote;
 
@@ -1352,7 +1353,9 @@ const app=initializeApp({
   appId:"1:87240859583:web:574c9687dfb1275bab8b0a"
 });
 const auth=getAuth(app);
-let db;try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){db=initializeFirestore(app,{})}
+const LP=(()=>{try{return localStorage.getItem('masrofati_lp')==='1'}catch(e){return false}})();
+const fsOpts=LP?{experimentalForceLongPolling:true}:{experimentalAutoDetectLongPolling:true};
+let db;try{db=initializeFirestore(app,{...fsOpts,localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){db=initializeFirestore(app,fsOpts)}
 window.fbReady=true;
 getRedirectResult(auth).catch(e=>window.authError&&window.authError(e));
 window.fbSignIn=async()=>{const p=new GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});

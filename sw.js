@@ -1,5 +1,5 @@
 // مصروفاتي — يخلّي التطبيق يفتح من غير نت، ويجيب آخر نسخة لما النت يبقى موجود
-const CACHE = 'masrofaty-v1';
+const CACHE = 'masrofaty-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
